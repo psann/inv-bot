@@ -54,8 +54,11 @@ async def event(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Format error.\nUse:\n/event Tunnel Attack | 2026-05-14 14:00 | 60,30,0"
         )
 
-threading.Thread(target=run_web).start()
+threading.Thread(target=run_web, daemon=True).start()
 
 bot_app = ApplicationBuilder().token(TOKEN).build()
 bot_app.add_handler(CommandHandler("event", event))
-bot_app.run_polling()
+
+print("BOT STARTED!")
+
+bot_app.run_polling(close_loop=False)
