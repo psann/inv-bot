@@ -1,60 +1,61 @@
 import os
+import asyncio
+import threading
+from datetime import datetime, timedelta, timezone
+from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from datetime import datetime, timedelta, timezone
 
 TOKEN = os.environ["BOT_TOKEN"]
 
-scheduler = AsyncIOScheduler()
-scheduler.start()
+web_app = Flask(__name__)
 
-async def event(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = " ".join(context.args)
-
-    title, date_str, reminders = [x.strip() for x in text.split("|")]
-
-    event_time = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
-    event_time = event_time.replace(tzinfo=timezone.utc)
-
-    reminder_list = reminders.split(",")
-
-    chat_id = update.effective_chat.id
-
-    for r in reminder_list:
-        mins = int(r)
-
-        send_time = event_time - timedelta(minutes=mins)
-
-        if mins == 0:
-            msg = f"⚔ {title} starts now!"
-        else:
-            msg = f"🔔 {title} starts in {mins} minutes!"
-
-        scheduler.add_job(
-            context.bot.send_message,
-            "date",
-            run_date=send_time,
-            args=[chat_id, msg]
-        )
-
-    await update.message.reply_text("Event scheduled!")
-
-app = ApplicationBuilder().token(TOKEN).build()
-
-app.add_handler(CommandHandler("event", event))
-
-app.run_polling()
-from flask import Flask
-import threading
-
-app_web = Flask(name)
-
-@app_web.route('/')
+@web_app.route("/")
 def home():
     return "Bot is running!"
 
 def run_web():
-    app_web.run(host="0.0.0.0", port=10000)
+    web_app.run(host="0.0.0.0", port=10000)
+
+async def send_later(bot, chat_id, message, send_time):
+    now = datetime.now(timezone.utc)
+    wait_seconds = (send_time - now).total_seconds()
+
+    if wait_seconds > 0:
+        await asyncio.sleep(wait_seconds)
+
+    await bot.send_message(chat_id=chat_id, text=message)
+
+async def event(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = " ".join(context.args)
+
+    try:
+        title, date_str, reminders = [x.strip() for x in text.split("|")]
+        event_time = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
+        event_time = event_time.replace(tzinfo=timezone.utc)
+
+        chat_id = update.effective_chat.id
+
+        for r in reminders.split(","):
+            mins = int(r.strip())
+            send_time = event_time - timedelta(minutes=mins)
+
+            if mins == 0:
+                msg = f"⚔ {title} starts now!"
+            else:
+                msg = f"🔔 {title} starts in {mins} minutes!"
+
+            asyncio.create_task(send_later(context.bot, chat_id, msg, send_time))
+
+        await update.message.reply_text("Event scheduled!")
+
+    except Exception:
+        await update.message.reply_text(
+            "Format error.\nUse:\n/event Tunnel Attack | 2026-05-14 14:00 | 60,30,0"
+        )
 
 threading.Thread(target=run_web).start()
+
+bot_app = ApplicationBuilder().token(TOKEN).build()
+bot_app.add_handler(CommandHandler("event", event))
+bot_app.run_polling()
