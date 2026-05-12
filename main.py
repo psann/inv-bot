@@ -45,3 +45,16 @@ app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("event", event))
 
 app.run_polling()
+from flask import Flask
+import threading
+
+app_web = Flask(name)
+
+@app_web.route('/')
+def home():
+    return "Bot is running!"
+
+def run_web():
+    app_web.run(host="0.0.0.0", port=10000)
+
+threading.Thread(target=run_web).start()
